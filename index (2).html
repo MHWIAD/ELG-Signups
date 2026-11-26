@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Employee-Led Groups</title>
+<style>
+  :root { --accent:#232f3e; --hl:#ff9900; --bg:#f4f5f7; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:#1b1f23; }
+  main { max-width:640px; margin:0 auto; padding:20px 16px 40px; }
+  h1 { font-size:1.5rem; margin:8px 0 16px; }
+  .card { background:#fff; border-radius:12px; padding:20px; box-shadow:0 1px 4px rgba(0,0,0,.12); }
+  label.alias { display:block; font-weight:600; margin-bottom:8px; }
+  input[type=text] { width:100%; font-size:1.1rem; padding:12px; border:1px solid #aab; border-radius:8px; }
+  button { font-size:1rem; padding:12px 18px; border:0; border-radius:8px; background:var(--hl); color:#111; font-weight:600; cursor:pointer; }
+  button.link { background:none; padding:6px 0; color:#0b5cad; font-weight:500; text-decoration:underline; }
+  .full { width:100%; margin-top:14px; }
+  ul { list-style:none; margin:0; padding:0; }
+  li.elg { background:#fff; border-radius:12px; margin-bottom:10px; padding:14px 16px; box-shadow:0 1px 4px rgba(0,0,0,.12); }
+  .row { display:flex; align-items:center; gap:12px; }
+  .row input[type=checkbox] { width:24px; height:24px; flex:none; accent-color:var(--accent); }
+  .row .name { font-weight:600; flex:1; }
+  .info { display:none; margin:10px 0 0 36px; font-size:.95rem; line-height:1.45; color:#333; }
+  li.open .info { display:block; }
+  .hello { color:#555; margin-bottom:12px; }
+  .msg { margin-top:12px; font-size:.95rem; }
+  .err { color:#b00020; }
+  .ok { color:#1b6e2d; }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<main>
+  <!-- Step 1: alias -->
+  <section id="aliasScreen" class="card">
+    <h1>Welcome</h1>
+    <form id="aliasForm">
+      <label class="alias" for="alias">Enter your alias</label>
+      <input id="alias" type="text" autocomplete="off" autocapitalize="none" maxlength="32" required pattern="[A-Za-z0-9._\-]{2,32}" placeholder="e.g. jdoe">
+      <button class="full" type="submit">Continue</button>
+      <div id="aliasErr" class="msg err" hidden>Use 2–32 letters, numbers, dots, dashes or underscores.</div>
+    </form>
+  </section>
+
+  <!-- Step 2: ELG list -->
+  <section id="listScreen" hidden>
+    <h1>Employee-Led Groups</h1>
+    <div class="hello">Signed in as <strong id="aliasShown"></strong> · <button class="link" id="changeAlias" type="button">change</button></div>
+    <p>Check every group you're interested in.</p>
+    <ul id="elgList"></ul>
+    <button class="full" id="submitBtn" type="button">Submit</button>
+    <div id="status" class="msg" role="status"></div>
+  </section>
+</main>
+
+<script>
+/* ---------- CONFIG ---------- */
+// URL of the Power Automate "When an HTTP request is received" flow
+// that adds a row to your Excel table. Leave empty to test without sending.
+const SUBMIT_URL = "";
+
+const ELGS = [
+  { id: "pwd", name: "People with Disabilities at Amazon", info: `Amazon People with Disabilities (AmazonPWD) is committed to building a community that supports employees and customers who have apparent and non-apparent disabilities. AmazonPWD is open to all. You don't have to have a disability to be part of AmazonPWD, just a passion for improving the customer experience.` },
+  { id: "awe", name: "Amazon Women in Engineering", info: `The Amazon Women in Engineering (AWE) mission is to build community and support for technical women. AWE is open to all. We intentionally keep the definition of "in technology" broad as technical roles at Amazon will always continue to evolve.` },
+  { id: "arabs", name: "Arabs at Amazon", info: `Arabs at Amazon is a community that advocates for Arab employees and customers. We aim to support Arab voices, talent, and harnessing the innovative potential of our members. Arabs at Amazon is a group of those who identify as Arab, allies, new friends, and open to all who want to learn more about the Arabic culture.` },
+  { id: "asians", name: "Asians at Amazon", info: `Asians at Amazon (AatA) provides a support structure and network for Pan-Asian communities. We help connect employees of Asian descent across geographies by sharing experiences and providing access to networking and community-building opportunities. We are open to all people who are interested in understanding Asian culture and heritage.` },
+  { id: "ben", name: "Black Employee Network", info: `The Black Employee Network (BEN) advocates for and supports Black employees at Amazon. BEN helps educate and build awareness globally, and offers networking and community-building opportunities. The Black Employee Network and all its activities are open to all.` },
+  { id: "bpp", name: "Body Positive Peers", info: `Body Positive Peers (BPP) aims to make Amazon a welcoming space for customers and employees in all physical forms. BPP does this by creating awareness of systemic bias of people with larger bodies, advocating for size-inclusive products and services, and creating judgment-free spaces for all bodies at Amazon. BPP is open to all.` },
+  { id: "cc", name: "Caribbean Connection", info: `Caribbean Connection (CC) is a community across Amazon that promotes cultural exchange among Caribbean cultures and the broader organization. Open to all Amazon employees interested in Caribbean culture, CC creates a safe space and embraces the Caribbean "work hard - play hard" spirit. The group aims to raise awareness of Caribbean history and encourage community engagement with the Caribbean region. CC is open to all.` },
+  { id: "connect", name: "Connect at Amazon", info: `The mission of Connect at Amazon is to build a global network of local communities built by Amazonians for Amazonians. We make it easy to find your community and own your Amazon experience. Connect at Amazon is open to all.` },
+  { id: "families", name: "Families at Amazon", info: `Families at Amazon unites all Amazon caregivers and allies to share knowledge, foster growth, and cultivate community connections among families. We support everyone with an affinity for caregiving and enthusiastically welcome all perspectives, locations, family structures, and life situations. Families at Amazon is open to all.` },
+  { id: "glamazon", name: "Glamazon", info: `Glamazon is focused on identities and orientations outside the cisgender, heterosexual default. Along with well-known lesbian, gay, bisexual, transgender, and queer identities, we welcome all identities in addition to advocates and parents. The group mentors, promotes community, and visibility throughout Amazon. Glamazon is open to all.` },
+  { id: "hindus", name: "Hindus at Amazon", info: `Hindus at Amazon (HAA) is a community that celebrates and shares the rich heritage of Sanatan Dharma (aka Hinduism), one of humanity's oldest and most comprehensive ways of life. Our community offers regular knowledge-sharing sessions, holistic wellness programs (including yoga, meditation, kirtan music sessions), and vibrant cultural celebrations. Together, we bridge ancient wisdom with modern workplace dynamics, fostering an environment where professional growth and personal well-being flourish hand in hand. HAA is open to all.` },
+  { id: "indigenous", name: "Indigenous at Amazon", info: `Indigenous at Amazon celebrates those cultures that originated in a particular place; also known as native. We foster a community of Indigenous employees and allies through networking and shared experiences. We aim to innovate and solve the problems with culturally aware technologies, services, and programs. Indigenous at Amazon is open to all.` },
+  { id: "jewish", name: "Jewish at Amazon", info: `The Jewish at Amazon offers a safe space for Jewish employees, non-Jewish allies and for anyone who wishes to learn more about what it means to be Jewish, one of the world's oldest peoples at the crossroads of culture, ethnicity, and spirituality. Jewish at Amazon is open to all.` },
+  { id: "latinos", name: "Latinos at Amazon", info: `Latinos at Amazon is focused on building a community for Hispanic and Latino employees, centered on community outreach, and improving the Amazon experience for our customers. The group mentors, advises, and hosts social and cultural events. Latinos at Amazon is open to all.` },
+  { id: "mhw", name: "Mental Health & Well-Being at Amazon", info: `Mental Health and Well-Being (MHW) mission is to promote well-being and to create a community where we can come together to reduce the stigma of mental health, raise awareness, create a culture of acceptance, and support one another. The group helps find people resources and hosts events featuring Amazonians along with mental health professionals. MHW is open to all.` },
+  { id: "muslims", name: "Muslims at Amazon", info: `Muslims@Amazon is a community for Muslim employees and for anyone who wishes to learn more about what it means to be Muslim. Amazon has a vast Muslim community, spanning ethnicity, culture, and traditions. This group provides a space to come together and build connections across our many backgrounds and shared experiences. Muslims@Amazon is open to all.` },
+  { id: "sustainability", name: "Sustainability at Amazon", info: `The Sustainability at Amazon Employee-Led Group exists to educate, advocate, and activate Amazonians worldwide in the pursuit of environmental sustainability. We complement Amazon's corporate sustainability efforts by empowering employees to drive change from within. We work alongside Amazon's Worldwide Sustainability team to bridge The Climate Pledge (net-zero carbon by 2040) with grassroots employee leadership and innovation. Sustainability at Amazon is open to all.` },
+  { id: "taa", name: "Together at Amazon Ambassadors", info: `The Together Ambassador Program (TAA) is a mechanism, designed to build community, empower and enable Amazonians from various backgrounds and lived experiences to be allies and advocates within their organization. It is focused on initiatives and behaviors that foster community. TAA is open to all.` },
+  { id: "trans", name: "TRANS at Amazon", info: `Trans@ is open to anyone interested in Gender Inclusive issues, events, meetings and information. We invite all Amazonians to join us in a community focused on love, community, support, and resilience. Trans@ is open to all.` },
+  { id: "warriors", name: "Warriors at Amazon", info: `Warriors at Amazon include current and former active military personnel, their families, and the Amazon employees who support them. Our Mission is to provide our members a professional network, a means in which to organize community outreach programs, to aid veterans during their transition into the Amazon workforce and to be a resource for Veteran and military spouse recruiting. Warriors at Amazon is open to all.` },
+  { id: "women", name: "Women at Amazon", info: `Women at Amazon (W@A) is a community for employees in all businesses interested in creating community and support for women. The mission is to make Amazon the premier global destination for women. Women at Amazon is open to all.` },
+  { id: "wifi", name: "Women in FGBS Initiative at Amazon", info: `The Women in Finance & Global Business Services Initiative (WiFi) focuses on retention, support, information, and allyship, with a vision to make Amazon the Earth's most sought after long-term career choice for women working in the areas represented by FGBS. WiFi is open to all.` }
+];
+/* ---------------------------- */
+
+const $ = id => document.getElementById(id);
+let alias = "";
+
+function esc(s){ const d=document.createElement("div"); d.textContent=s; return d.innerHTML; }
+
+function renderList(){
+  $("elgList").innerHTML = ELGS.map(g => `
+    <li class="elg" data-id="${esc(g.id)}">
+      <div class="row">
+        <input type="checkbox" id="cb-${esc(g.id)}" value="${esc(g.id)}" aria-label="${esc(g.name)}">
+        <label class="name" for="cb-${esc(g.id)}">${esc(g.name)}</label>
+        <button class="link toggle" type="button" aria-expanded="false">More info</button>
+      </div>
+      <div class="info">${esc(g.info)}</div>
+    </li>`).join("");
+}
+
+$("elgList").addEventListener("click", e => {
+  const btn = e.target.closest(".toggle");
+  if (!btn) return;
+  const li = btn.closest("li");
+  const open = li.classList.toggle("open");
+  btn.setAttribute("aria-expanded", open);
+  btn.textContent = open ? "Less info" : "More info";
+});
+
+$("aliasForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const v = $("alias").value.trim().toLowerCase();
+  if (!/^[a-z0-9._-]{2,32}$/.test(v)) { $("aliasErr").hidden = false; return; }
+  $("aliasErr").hidden = true;
+  alias = v;
+  $("aliasShown").textContent = alias;
+  $("aliasScreen").hidden = true;
+  $("listScreen").hidden = false;
+});
+
+$("changeAlias").addEventListener("click", () => {
+  $("listScreen").hidden = true;
+  $("aliasScreen").hidden = false;
+  $("status").textContent = "";
+});
+
+$("submitBtn").addEventListener("click", async () => {
+  const picked = ELGS.filter(g => $("cb-" + g.id).checked).map(g => g.name);
+  const st = $("status");
+  if (!picked.length) { st.className = "msg err"; st.textContent = "Check at least one group."; return; }
+  const payload = { alias, groups: picked.join("; "), submitted: new Date().toISOString() };
+  if (!SUBMIT_URL) { st.className = "msg err"; st.textContent = "Not connected yet (SUBMIT_URL empty). Would send: " + JSON.stringify(payload); return; }
+  $("submitBtn").disabled = true;
+  st.className = "msg"; st.textContent = "Sending…";
+  try {
+    const r = await fetch(SUBMIT_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    st.className = "msg ok"; st.textContent = "Thanks! Your choices were submitted.";
+  } catch (err) {
+    st.className = "msg err"; st.textContent = "Could not submit. Please try again.";
+    $("submitBtn").disabled = false;
+  }
+});
+
+renderList();
+</script>
+</body>
+</html>
